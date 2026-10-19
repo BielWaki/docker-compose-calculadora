@@ -1,0 +1,65 @@
+services:
+  # Serviço principal: imagem criada na atividade anterior (multi-stage)
+  calculadora:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: calculadora-python:1.0
+    container_name: calculadora_web
+    ports:
+      - "8080:80"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  # Banco de dados para guardar o histórico das operações
+  db:
+    image: postgres:16-alpine
+    container_name: calculadora_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-calculadora}
+      POSTGRES_USER: ${POSTGRES_USER:-calc_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calc_senha123}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-calc_user} -d ${POSTGRES_DB:-calculadora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  # Cache para guardar resultados de operações repetidas
+  cache:
+    image: redis:7-alpine
+    container_name: calculadora_cache
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - cache_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: always
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true   # db e cache sem acesso externo
+
+volumes:
+  db_data:
+  cache_data:
